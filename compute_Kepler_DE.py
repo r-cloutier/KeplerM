@@ -85,6 +85,7 @@ def download_KIC_files(kepid):
     os.system(cmd)
     os.system('mv %s TPSfiles'%fname)
     
+    return got_file
 
 
 def getDE_Kepler_star(kepid):
@@ -124,7 +125,9 @@ def getDE_Kepler_star(kepid):
 
     # Download  window function and one-sigma depth function tables and
     # define path to the detection grids
-    download_KIC_files(kepid)
+    got_file = download_KIC_files(kepid)
+    if not got_file:
+	return None
     doit.period_want = Pgrid
     doit.rp_want = rpgrid
     doit.ecc = 0.
@@ -144,6 +147,6 @@ def getDE_Kepler_star(kepid):
 
 if __name__ == '__main__':
     kepids = np.loadtxt(KepMdwarffile, delimiter=',')[:,0]
-    for i in range(kepids.size):
+    for i in range(1170, kepids.size):
 	print float(i) / kepids.size, kepids[i]
 	_= getDE_Kepler_star(kepids[i])
