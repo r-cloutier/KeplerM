@@ -3,8 +3,9 @@ from scipy.stats import gamma, skewnorm
 from scipy.optimize import curve_fit
 
 
-global KepMdwarffile
+global KepMdwarffile, G
 KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
+G = 6.67408e-11
 
 
 def get_Kepler_Mdwarf_planets(fname):
@@ -30,8 +31,10 @@ def get_Kepler_Mdwarf_planets(fname):
     self._initialize_arrays()
     for i in range(Nplanets):
 
+        print float(i) / Nplanets
         g = np.in1d(KepID, kepid[i])
-        
+
+        # stellar parameters (both pre (1) and post-GAIA (2))
         self.KepIDs[i] = kepid[i]
         self.isMdwarf[i] = g.sum() == 1
         self.Jmags[i] = Jmag[g] if g.sum() == 1 else np.nan
@@ -53,20 +56,41 @@ def get_Kepler_Mdwarf_planets(fname):
         self.MKs[i] = MK[g] if g.sum() == 1 else np.nan
         self.ehi_MKs[i] = ehi_MK[g] if g.sum() == 1 else np.nan
         self.elo_MKs[i] = elo_MK[g] if g.sum() == 1 else np.nan
-        self.Rss[i] = Rs_RSun[g] if g.sum() == 1 else np.nan
-        self.ehi_Rss[i] = ehi_Rs[g] if g.sum() == 1 else np.nan
-        self.elo_Rss[i] = elo_Rs[g] if g.sum() == 1 else np.nan
-        self.Teffs[i] = Teff_K[g] if g.sum() == 1 else np.nan
-        self.ehi_Teffs[i] = ehi_Teff[g] if g.sum() == 1 else np.nan
-        self.elo_Teffs[i] = elo_Teff[g] if g.sum() == 1 else np.nan
-        self.Mss[i] = Ms_MSun[g] if g.sum() == 1 else np.nan
-        self.ehi_Mss[i] = ehi_Ms[g] if g.sum() == 1 else np.nan
-        self.elo_Mss[i] = elo_Ms[g] if g.sum() == 1 else np.nan
-        self.loggs[i] = logg_dex[g] if g.sum() == 1 else np.nan
-        self.ehi_loggs[i] = ehi_logg[g] if g.sum() == 1 else np.nan
-        self.elo_loggs[i] = elo_logg[g] if g.sum() == 1 else np.nan
-        self.FeHs[i] = koi_smet[i]
-        self.e_FeHs[i] = np.abs([koi_smet_err1[i], koi_smet_err1[i]]).mean()
+
+        # pre-GAIA
+        self.Rss1[i] = koi_srad[i]
+        self.ehi_Rss1[i] = koi_srad_err1[i] if koi_srad_err1[i] > 0 else koi_srad[i]*.07
+        self.elo_Rss1[i] = abs(koi_srad_err2[i]) if koi_srad_err2[i] < 0 else koi_srad[i]*.08
+        self.Teffs1[i] = koi_steff[i]
+        self.ehi_Teffs1[i] = koi_steff_err1[i] if koi_steff_err1[i] > 0 else koi_steff[i]*.02
+        self.elo_Teffs1[i] = abs(koi_steff_err2[i]) if koi_steff_err2[i] < 0 else koi_steff[i]*.02
+        self.loggs1[i] = koi_slogg[i]
+        self.ehi_loggs1[i] = koi_slogg_err1[i] if koi_slogg_err1[i] > 0 else koi_slogg[i]*.009
+        self.elo_loggs1[i] = abs(koi_slogg_err2[i]) if koi_slogg_err2[i] < 0 else koi_slogg[i]*.006
+        _,_,samp_Rs = get_samples_from_percentiles(self.Rss1[i], self.ehi_Rss1[i],
+                                                   self.elo_Rss1[i], Nsamp=1e3)
+        _,_,samp_logg = get_samples_from_percentiles(self.loggs1[i], self.ehi_loggs1[i],
+                                                     self.elo_loggs1[i], Nsamp=1e3)
+        samp_Ms = rvs.kg2Msun(10**samp_logg * rvs.Rsun2m(samp_Rs)**2 * 1e-2 / G)
+        v = np.percentile(samp_Ms, (16,50,84))
+        self.Mss1[i], self.ehi_Mss1[i], self.elo_Mss1[i] = v[1], v[2]-v[1], v[1]-v[0] 
+        self.FeHs1[i] = koi_smet[i]
+        self.ehi_FeHs1[i] = koi_smet_err1[i]
+        self.elo_FeHs1[i] = abs(koi_smet_err1[i])
+
+        # post-GAIA
+        self.Rss2[i] = Rs_RSun[g] if g.sum() == 1 else np.nan
+        self.ehi_Rss2[i] = ehi_Rs[g] if g.sum() == 1 else np.nan
+        self.elo_Rss2[i] = elo_Rs[g] if g.sum() == 1 else np.nan
+        self.Teffs2[i] = Teff_K[g] if g.sum() == 1 else np.nan
+        self.ehi_Teffs2[i] = ehi_Teff[g] if g.sum() == 1 else np.nan
+        self.elo_Teffs2[i] = elo_Teff[g] if g.sum() == 1 else np.nan
+        self.Mss2[i] = Ms_MSun[g] if g.sum() == 1 else np.nan
+        self.ehi_Mss2[i] = ehi_Ms[g] if g.sum() == 1 else np.nan
+        self.elo_Mss2[i] = elo_Ms[g] if g.sum() == 1 else np.nan
+        self.loggs2[i] = logg_dex[g] if g.sum() == 1 else np.nan
+        self.ehi_loggs2[i] = ehi_logg[g] if g.sum() == 1 else np.nan
+        self.elo_loggs2[i] = elo_logg[g] if g.sum() == 1 else np.nan
         
         # planet parameters
         self.Ps[i] = koi_period[i]
@@ -88,11 +112,16 @@ def get_Kepler_Mdwarf_planets(fname):
 
         # compute planet parameters
         if self.isMdwarf[i]:
-            rps, smas, Teqs, Fs = sample_planet_params(self, i)
-            self.rps[i], self.ehi_rps[i], self.elo_rps[i] = rps
-            self.smas[i], self.ehi_smas[i], self.elo_smas[i] = smas
-            self.Teqs[i], self.ehi_Teqs[i], self.elo_Teqs[i] = Teqs
-            self.Fs[i], self.ehi_Fs[i], self.elo_Fs[i] = Fs
+            rps1, smas1, Teqs1, Fs1 = sample_planet_params(self, i, postGAIA=False)
+            self.rps1[i], self.ehi_rps1[i], self.elo_rps1[i] = rps1
+            self.smas1[i], self.ehi_smas1[i], self.elo_smas1[i] = smas1
+            self.Teqs1[i], self.ehi_Teqs1[i], self.elo_Teqs1[i] = Teqs1
+            self.Fs1[i], self.ehi_Fs1[i], self.elo_Fs1[i] = Fs1
+            rps2, smas2, Teqs2, Fs2 = sample_planet_params(self, i, postGAIA=True)
+            self.rps2[i], self.ehi_rps2[i], self.elo_rps2[i] = rps2
+            self.smas2[i], self.ehi_smas2[i], self.elo_smas2[i] = smas2
+            self.Teqs2[i], self.ehi_Teqs2[i], self.elo_Teqs2[i] = Teqs2
+            self.Fs2[i], self.ehi_Fs2[i], self.elo_Fs2[i] = Fs2
 
     # save Kepler M dwarf planet population
     self._pickleobject()
@@ -110,7 +139,7 @@ class KepConfirmedMdwarfPlanets:
     def _initialize_arrays(self):
         N = self.Nplanets
 
-        # stellar parameters
+        # stellar parameters (both pre (1) and post-GAIA (2))
         self.KepIDs, self.isMdwarf = np.zeros(N), np.zeros(N, dtype=bool)
         self.Jmags, self.e_Jmags = np.zeros(N), np.zeros(N)
         self.Hmags, self.e_Hmags = np.zeros(N), np.zeros(N)
@@ -121,15 +150,21 @@ class KepConfirmedMdwarfPlanets:
                                                      np.zeros(N)
         self.AKs, self.e_AKs = np.zeros(N), np.zeros(N)
         self.MKs, self.ehi_MKs, self.elo_MKs=np.zeros(N),np.zeros(N),np.zeros(N)
-        self.Rss, self.ehi_Rss, self.elo_Rss=np.zeros(N),np.zeros(N),np.zeros(N)
-        self.Mss, self.ehi_Mss, self.elo_Mss=np.zeros(N),np.zeros(N),np.zeros(N)
-        self.Teffs, self.ehi_Teffs, self.elo_Teffs = np.zeros(N), np.zeros(N), \
-                                                     np.zeros(N)
-        self.loggs, self.ehi_loggs, self.elo_loggs = np.zeros(N), np.zeros(N), \
-                                                     np.zeros(N)
-        self.FeHs, self.e_FeHs = np.zeros(N), np.zeros(N)
+        self.Rss1, self.ehi_Rss1, self.elo_Rss1=np.zeros(N),np.zeros(N),np.zeros(N)
+        self.Mss1, self.ehi_Mss1, self.elo_Mss1=np.zeros(N),np.zeros(N),np.zeros(N)
+        self.Teffs1, self.ehi_Teffs1, self.elo_Teffs1 = np.zeros(N), np.zeros(N), \
+                                                        np.zeros(N)
+        self.loggs1, self.ehi_loggs1, self.elo_loggs1 = np.zeros(N), np.zeros(N), \
+                                                        np.zeros(N)
+        self.FeHs1, self.ehi_FeHs1, self.elo_FeHs1=np.zeros(N),np.zeros(N),np.zeros(N)
+        self.Rss2, self.ehi_Rss2, self.elo_Rss2=np.zeros(N),np.zeros(N),np.zeros(N)
+        self.Mss2, self.ehi_Mss2, self.elo_Mss2=np.zeros(N),np.zeros(N),np.zeros(N)
+        self.Teffs2, self.ehi_Teffs2, self.elo_Teffs2 = np.zeros(N), np.zeros(N), \
+                                                        np.zeros(N)
+        self.loggs2, self.ehi_loggs2, self.elo_loggs2 = np.zeros(N), np.zeros(N), \
+                                                        np.zeros(N)
         
-        # planet parameters
+        # planet parameters (both pre (1) and post-GAIA (2))
         self.Ps, self.e_Ps = np.zeros(N), np.zeros(N)
         self.T0s, self.e_T0s = np.zeros(N), np.zeros(N)
         self.Ds, self.e_Ds = np.zeros(N), np.zeros(N)
@@ -138,18 +173,30 @@ class KepConfirmedMdwarfPlanets:
         self.rpRs, self.ehi_rpRs, self.elo_rpRs = np.zeros(N), np.zeros(N), \
                                                   np.zeros(N)
         self.bs, self.ehi_bs, self.elo_bs=np.zeros(N),np.zeros(N),np.zeros(N)
-        self.rps = np.repeat(np.nan,N)
-        self.ehi_rps = np.repeat(np.nan,N)
-        self.elo_rps = np.repeat(np.nan,N)
-        self.smas = np.repeat(np.nan,N)
-        self.ehi_smas = np.repeat(np.nan,N)
-        self.elo_smas = np.repeat(np.nan,N)
-        self.Teqs = np.repeat(np.nan,N)
-        self.ehi_Teqs = np.repeat(np.nan,N)
-        self.elo_Teqs = np.repeat(np.nan,N)
-        self.Fs = np.repeat(np.nan,N)
-        self.ehi_Fs = np.repeat(np.nan,N)
-        self.elo_Fs = np.repeat(np.nan,N)
+        self.rps1  = np.repeat(np.nan,N)
+        self.ehi_rps1  = np.repeat(np.nan,N)
+        self.elo_rps1  = np.repeat(np.nan,N)
+        self.smas1  = np.repeat(np.nan,N)
+        self.ehi_smas1  = np.repeat(np.nan,N)
+        self.elo_smas1  = np.repeat(np.nan,N)
+        self.Teqs1  = np.repeat(np.nan,N)
+        self.ehi_Teqs1  = np.repeat(np.nan,N)
+        self.elo_Teqs1  = np.repeat(np.nan,N)
+        self.Fs1  = np.repeat(np.nan,N)
+        self.ehi_Fs1  = np.repeat(np.nan,N)
+        self.elo_Fs1  = np.repeat(np.nan,N)
+        self.rps2 = np.repeat(np.nan,N)
+        self.ehi_rps2 = np.repeat(np.nan,N)
+        self.elo_rps2 = np.repeat(np.nan,N)
+        self.smas2 = np.repeat(np.nan,N)
+        self.ehi_smas2 = np.repeat(np.nan,N)
+        self.elo_smas2 = np.repeat(np.nan,N)
+        self.Teqs2 = np.repeat(np.nan,N)
+        self.ehi_Teqs2 = np.repeat(np.nan,N)
+        self.elo_Teqs2 = np.repeat(np.nan,N)
+        self.Fs2 = np.repeat(np.nan,N)
+        self.ehi_Fs2 = np.repeat(np.nan,N)
+        self.elo_Fs2 = np.repeat(np.nan,N)
 
 
     def _pickleobject(self):
@@ -172,23 +219,30 @@ def resample_PDF(pdf, Nsamp, sig=1e-3):
     return pdf_resamp
 
 
-def sample_planet_params(self, index):
-    '''planet planet radius distribution'''
-    # get stellar parameters PDFs
+def sample_planet_params(self, index, postGAIA=True):
+    '''sample distribution of planet parameters from observables and stellar pdfs'''
+    # get stellar parameters PDFs either from derived from GAIA distances
+    # or from original Kepler parameters (approximate distributions as skewnormal)
     g = int(index)
-    path = '../GAIAMdwarfs/Gaia-DR2-distances_custom/DistancePosteriors/'
-    samp_Rs,samp_Teff,samp_Ms = np.loadtxt('%s/KepID_allpost_%i'%(path,self.KepIDs[g]),
-                                           delimiter=',', usecols=(9,10,11)).T
-    samp_Rs = resample_PDF(samp_Rs[np.isfinite(samp_Rs)], samp_Rs.size, sig=1e-3)
-    samp_Teff = resample_PDF(samp_Teff[np.isfinite(samp_Teff)], samp_Teff.size, sig=5)
-    samp_Ms = resample_PDF(samp_Ms[np.isfinite(samp_Ms)], samp_Ms.size, sig=1e-3)
-    
-    # sample distributions from point estimates
-    ##g = self.KepIDs == KepID
-    p16 = float(self.rpRs[g] - self.elo_rpRs[g])
-    med = float(self.rpRs[g])
-    p84 = float(self.rpRs[g] + self.ehi_rpRs[g])
-    _,_,samp_rpRs = get_samples_from_percentiles(p16, med, p84, Nsamp=samp_Rs.size)
+    if postGAIA:
+        path = '../GAIAMdwarfs/Gaia-DR2-distances_custom/DistancePosteriors/'
+        samp_Rs,samp_Teff,samp_Ms = np.loadtxt('%s/KepID_allpost_%i'%(path,self.KepIDs[g]),
+                                               delimiter=',', usecols=(9,10,11)).T
+        samp_Rs = resample_PDF(samp_Rs[np.isfinite(samp_Rs)], samp_Rs.size, sig=1e-3)
+        samp_Teff = resample_PDF(samp_Teff[np.isfinite(samp_Teff)], samp_Teff.size, sig=5)
+        samp_Ms = resample_PDF(samp_Ms[np.isfinite(samp_Ms)], samp_Ms.size, sig=1e-3)
+    else:
+        _,_,samp_Rs = get_samples_from_percentiles(self.Rss1[g], self.ehi_Rss1[g],
+                                                   self.elo_Rss1[g], Nsamp=1e3)
+        _,_,samp_Teff = get_samples_from_percentiles(self.Teffs1[g], self.ehi_Teffs1[g],
+                                                     self.elo_Teffs1[g], Nsamp=1e3)
+        _,_,samp_Ms = get_samples_from_percentiles(self.Mss1[g], self.ehi_Mss1[g],
+                                                   self.elo_Mss1[g], Nsamp=1e3)
+        
+    # sample rp/Rs distribution from point estimates
+    _,_,samp_rpRs = get_samples_from_percentiles(self.rpRs[g], self.ehi_rpRs[g],
+                                                 self.elo_rpRs[g],
+                                                 Nsamp=samp_Rs.size)
     
     # compute planet radius PDF
     samp_rp = rvs.m2Rearth(rvs.Rsun2m(samp_rpRs * samp_Rs))
@@ -233,11 +287,14 @@ def Skewnorm_CDF_func(x, a, mu, sig):
     return skewnorm.cdf(x, a, loc=mu, scale=sig)
 
 
-def get_samples_from_percentiles(p16, med, p84, Nsamp=1e3, add_p5_p95=True, pltt=False):
+def get_samples_from_percentiles(val, ehi, elo, Nsamp=1e3, add_p5_p95=True, pltt=False):
     '''Given the 16, 50, and 84 percentiles of a parameter's distribution,
     fit a Skew normal CDF and sample it.'''
+    # get percentiles
+    p16, med, p84 = float(val-elo), float(val), float(val+ehi)    
     assert p16 < med
     assert med < p84
+    
     # add approximate percentiles to help with fitting the wings
     # otherwise the resulting fitting distritubions tend to
     if add_p5_p95:
