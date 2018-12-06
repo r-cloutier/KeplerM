@@ -46,6 +46,12 @@ def compute_Ndet_maps(self, sigs=.8, condition=None):
     NdetF_smooth = gaussian_filter(zF, sigs[2])
     NdetTeq_smooth = gaussian_filter(zTeq, sigs[2])
 
+    # save to table
+    np.save('KeplerMaps/Ndet_maps', np.array([NdetP_smooth,
+                                              Ndetsma_smooth,
+                                              NdetF_smooth,
+                                              NdetTeq_smooth]))
+
     return NdetP_smooth, Ndetsma_smooth, NdetF_smooth, NdetTeq_smooth
 
 
@@ -116,6 +122,13 @@ def compute_SNR_maps(self, sigs=.8):
         SNRsma_maps[i] = gaussian_filter(SNRsma_maps[i], sigs[1])
         SNRF_maps[i] = gaussian_filter(SNRF_maps[i], sigs[2])
         SNRTeq_maps[i] = gaussian_filter(SNRTeq_maps[i], sigs[3])
+
+    # save to fits table
+    cP = _create_fits_column(NdetP_smooth, 'Ndet_P_rp')
+    csma = _create_fits_column(Ndetsma_smooth, 'Ndet_sma_rp')
+    cF = _create_fits_column(NdetF_smooth, 'Ndet_F_rp')
+    cTeq = _create_fits_column(NdetTeq_smooth, 'Ndet_Teq_rp')
+    _create_fits_table([cP,csma,cF,cTeq], 'KeplerMaps/Ndet_maps.fits')
         
     return KepIDsout, SNRP_maps, SNRsma_maps, SNRF_maps, SNRTeq_maps 
 
@@ -267,7 +280,7 @@ def compute_transitprob_maps(self, KepIDs, sigs=.8, factor=1.08):
     return probP_maps, probsma_maps, probF_maps, probTeq_maps
 
 
-                             
+    
 def _get_one_DE_map(KepID, MES_map):
     '''Compute the average DE maps given a MES map for a single Kepler star.'''
     # get DE curves for this star
@@ -315,11 +328,13 @@ def compute_avg_detprob_curve():
 
 
 
+
+
 if __name__ == '__main__':
     self = loadpickle('Keplertargets/KepConfirmedMdwarfPlanets_v3')
     print 'Computing detection maps...'
     NdetP, Ndetsma, NdetF, NdetTeq = compute_Ndet_maps(self, sigs=.8)
-    print 'Computing transit S/N maps for all Kepler M dwarfs...'
+    '''print 'Computing transit S/N maps for all Kepler M dwarfs...'
     KepIDs, SNRP, SNRsma, SNRF, SNRTeq = compute_SNR_maps(self, sigs=.8)
     print 'Computing MES maps for all Kepler M dwarfs...'
     MESP, MESsma, MESF, MESTeq = compute_MES_maps(SNRP, SNRsma, SNRF, SNRTeq,
@@ -345,3 +360,4 @@ if __name__ == '__main__':
     fF, fSmearF = NdetF/np.mean(compF,0), NdetF/np.mean(compSmearF,0)
     fTeq, fSmearTeq = NdetTeq/np.mean(compTeq,0), \
                       NdetTeq/np.mean(compSmearTeq,0)
+    '''
