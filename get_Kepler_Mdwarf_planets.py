@@ -1,4 +1,5 @@
 from imports import *
+from compute_Kepler_DE import get_stellar_table
 from scipy.stats import gamma, skewnorm
 from scipy.optimize import curve_fit
 
@@ -6,6 +7,13 @@ from scipy.optimize import curve_fit
 global KepMdwarffile, G
 KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
 G = 6.67408e-11
+
+# get stellar completeness parameters
+d = np.genfromtxt('TPSfiles/nph-nstedAPI_clean.txt', skip_header=208, delimiter=',',
+                  usecols=(0,49,64,65,66,67,68,69,70,71,72,73,74,75,76,77))
+kepidC,data_spanC,cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,cdpp7d5,cdpp9,cdpp10d5,cdpp12,cdpp12d5,cdpp15 = d.T
+cdpp_times = np.array([1.5,2,2.5,3,3.5,4.5,5,6,7.5,9,10.5,12,12.5,15])
+cdpps = np.array([cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,cdpp7d5,cdpp9,cdpp10d5,cdpp12,cdpp12d5,cdpp15]).T
 
 
 def get_Kepler_Mdwarf_planets(fname):
@@ -110,7 +118,13 @@ def get_Kepler_Mdwarf_planets(fname):
         self.ehi_bs[i] = koi_impact_err1[i]
         self.elo_bs[i] = abs(koi_impact_err2[i])
 
-        # compute planet parameters
+        # completeness parameters
+        self.CDPPs[i] = get_fitted_cdpp(self.KepIDs[i], self.Ds[i])
+        self.data_spans[i] = data_spanC[kepidC == self.KepIDs[i]]
+        self.SNRtransits[i] = self.Zs[i] / self.CDPPs[i] * np.sqrt(get_Ntransits(self.data_spans[i],
+                                                                                 self.Ps[i]))
+        
+        # computed planet parameters
         if self.isMdwarf[i]:
             rps1, smas1, Teqs1, Fs1 = sample_planet_params(self, i, postGAIA=False)
             self.rps1[i], self.ehi_rps1[i], self.elo_rps1[i] = rps1
@@ -198,6 +212,11 @@ class KepConfirmedMdwarfPlanets:
         self.ehi_Fs2 = np.repeat(np.nan,N)
         self.elo_Fs2 = np.repeat(np.nan,N)
 
+        # sensitivity calculations
+        self.CDPPs = np.zeros(N)
+        self.data_spans = np.zeros(N)
+        self.SNRtransits = np.zeros(N)
+        
 
     def _pickleobject(self):
         fObj = open(self.fname_out, 'wb')
@@ -268,6 +287,24 @@ def sample_planet_params(self, index, postGAIA=True):
     return rps, smas, Teqs, Fs
 
 
+def get_fitted_cdpp(KepID, duration):
+    # get cdpps for this star
+    g = kepidC == KepID
+    if g.sum() == 0:
+        return np.nan
+    else:
+        cdpp_arr = cdpps[g].reshape(cdpp_times.size)
+
+    # fit cubic function to cdpp(t)
+    func = np.poly1d(np.polyfit(cdpp_times, cdpp_arr, 3))
+    ##plt.plot(cdpp_times, cdpp_arr, '.', cdpp_times, func(cdpp_times), '-')
+    ##plt.show()
+    return func(duration)
+
+
+def get_Ntransits(data_span, P):
+    return int(np.round(data_span / float(P)))
+    
 
 def Gamma_CDF_func(x, k, theta):
     '''
