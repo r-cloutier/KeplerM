@@ -1,10 +1,9 @@
 from imports import *
-from compute_Kepler_DE import get_stellar_table
 from scipy.stats import gamma, skewnorm
 from scipy.optimize import curve_fit
 
 
-global KepMdwarffile, G
+global KepMdwarffile, G, data_spanC
 KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
 G = 6.67408e-11
 
@@ -12,7 +11,7 @@ G = 6.67408e-11
 d = np.genfromtxt('TPSfiles/nph-nstedAPI_clean.txt', skip_header=208, delimiter=',',
                   usecols=(0,49,64,65,66,67,68,69,70,71,72,73,74,75,76,77))
 kepidC,data_spanC,cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,cdpp7d5,cdpp9,cdpp10d5,cdpp12,cdpp12d5,cdpp15 = d.T
-cdpp_times = np.array([1.5,2,2.5,3,3.5,4.5,5,6,7.5,9,10.5,12,12.5,15])
+transit_durs = np.array([1.5,2,2.5,3,3.5,4.5,5,6,7.5,9,10.5,12,12.5,15])
 cdpps = np.array([cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,cdpp7d5,cdpp9,cdpp10d5,cdpp12,cdpp12d5,cdpp15]).T
 
 
@@ -121,7 +120,7 @@ def get_Kepler_Mdwarf_planets(fname):
         # completeness parameters
         self.CDPPs[i] = get_fitted_cdpp(self.KepIDs[i], self.Ds[i])
         self.data_spans[i] = data_spanC[kepidC == self.KepIDs[i]]
-        self.SNRtransits[i] = self.Zs[i] / self.CDPPs[i] * np.sqrt(get_Ntransits(self.data_spans[i],
+        self.SNRtransits[i] = self.Zs[i] / self.CDPPs[i] * np.sqrt(get_Ntransits(self.KepIDs[i],
                                                                                  self.Ps[i]))
         
         # computed planet parameters
@@ -280,11 +279,12 @@ def sample_planet_params(self, index, postGAIA=True):
     Teqs = v[1], v[2]-v[1], v[1]-v[0]
 
     # compute insolation
-    samp_F = 1367. * samp_Rs**2 * (samp_Teff/5778.)**4 / samp_as**2
+    samp_F = samp_Rs**2 * (samp_Teff/5778.)**4 / samp_as**2
     v = np.percentile(samp_F, (16,50,84))
     Fs = v[1], v[2]-v[1], v[1]-v[0]
     
     return rps, smas, Teqs, Fs
+
 
 
 def get_fitted_cdpp(KepID, duration):
@@ -293,17 +293,25 @@ def get_fitted_cdpp(KepID, duration):
     if g.sum() == 0:
         return np.nan
     else:
-        cdpp_arr = cdpps[g].reshape(cdpp_times.size)
+        cdpp_arr = cdpps[g].reshape(transit_durs.size)
+	if np.any(np.isnan(cdpp_arr)): return np.nan
 
     # fit cubic function to cdpp(t)
-    func = np.poly1d(np.polyfit(cdpp_times, cdpp_arr, 3))
-    ##plt.plot(cdpp_times, cdpp_arr, '.', cdpp_times, func(cdpp_times), '-')
+    func = np.poly1d(np.polyfit(transit_durs, cdpp_arr, 3))
+    ##plt.plot(transit_durs, cdpp_arr, '.', transit_durs, func(transit_durs), '-')
     ##plt.show()
     return func(duration)
 
 
-def get_Ntransits(data_span, P):
-    return int(np.round(data_span / float(P)))
+def get_Ntransits(KepID, P):
+    # get data span for this star
+    g = kepidC == KepID
+    if g.sum() == 0:
+	return np.nan
+    else:
+	data_span = float(data_spanC[g])
+
+    return int(np.round(data_span / P))
     
 
 def Gamma_CDF_func(x, k, theta):
