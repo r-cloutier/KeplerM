@@ -4,7 +4,7 @@ from scipy.ndimage.filters import gaussian_filter
 
 
 global KepMdwarffile, Pbins, smabins, Fbins, Teqbins, rpbins, transit_durs, \
-    cdppsC
+    cdppsC, suffix
 KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
 xlen = 40
 Pbins = np.logspace(np.log10(.5), 2, xlen)
@@ -12,6 +12,8 @@ smabins = np.logspace(-2, np.log10(.35), xlen)
 Fbins = np.logspace(np.log10(.5), 2, xlen)
 Teqbins = np.logspace(np.log10(240), np.log10(12e2), xlen)
 rpbins = np.logspace(np.log10(.5), 1, 31)
+suffix = 'allM'
+
 
 # get stellar completeness parameters
 d = np.genfromtxt('TPSfiles/nph-nstedAPI_clean.txt', skip_header=208,
@@ -24,7 +26,7 @@ cdppsC = np.array([cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,
 
 
 # TEMP: need to do MC sampling here over errorbars
-def compute_Ndet_maps(self, sigs=0, condition=None):
+def compute_Ndet_maps(self, sigs=0, condition=None, Nsamp=1e3):
     '''Compute the map of planet detections over some various distance 
     proxies and planet radius. This will be used to compute the occurrence rate 
     in each parameter space which can then be marginalized to get the 1d 
@@ -36,34 +38,45 @@ def compute_Ndet_maps(self, sigs=0, condition=None):
         assert condition.size == g.size
         g = g & (condition)
 
+    # do MC sampling of planet parameters
+    Ps = self.Ps[g], self.e_Ps[g]
+    smas = self.smas2[g], self.ehi_smas2[g], self.elo_smas2[g]
+    Fs = self.Fs2[g], self.ehi_Fs2[g], self.elo_Fs2[g]
+    Teqs = self.Teqs2[g], self.ehi_Teqs2[g], self.elo_Teqs2[g]
+    rps = self.rps2[g], self.ehi_rps2[g], self.elo_rps2[g]
+    samp_P,samp_sma,samp_F,samp_Teq,samp_rp = _MC_sample_planets(Ps, smas, Fs,
+                                                                 Teqs, rps,
+                                                                 Nsamp)
+
     # compute Ndet maps
-    zP,P_edges,rp_edges = np.histogram2d(self.Ps[g], self.rps2[g],
-                                         bins=[Pbins,rpbins])
-    zsma,sma_edges,rp_edges = np.histogram2d(self.smas2[g], self.rps2[g],
+    zP,P_edges,rp_edges = np.histogram2d(samp_P, samp_rp, bins=[Pbins,rpbins])
+    zP /= float(Nsamp)
+    zsma,sma_edges,rp_edges = np.histogram2d(samp_sma, samp_rp,
                                              bins=[smabins,rpbins])
+    zsma /= float(Nsamp)
     zF,F_edges,rp_edges = np.histogram2d(self.Fs2[g], self.rps2[g],
                                          bins=[Fbins,rpbins])
+    zF /= float(Nsamp)
     zTeq,Teq_edges,Teq_edges = np.histogram2d(self.Teqs2[g], self.rps2[g],
                                               bins=[Teqbins,rpbins])
-
+    zTeq /= float(Nsamp)
+    
     # return Ndet maps
     if type(sigs) in [float,int]:
         sigs = np.repeat(sigs, 4)
     else:
         assert len(sigs) == 4
         sigs = np.array(sigs)
-    NdetP_smooth = gaussian_filter(zP, sigs[0])
-    Ndetsma_smooth = gaussian_filter(zsma, sigs[1])
-    NdetF_smooth = gaussian_filter(zF, sigs[2])
-    NdetTeq_smooth = gaussian_filter(zTeq, sigs[3])
+    NdetP = gaussian_filter(zP, sigs[0])
+    Ndetsma = gaussian_filter(zsma, sigs[1])
+    NdetF = gaussian_filter(zF, sigs[2])
+    NdetTeq = gaussian_filter(zTeq, sigs[3])
 
     # save to table
-    np.save('KeplerMaps/Ndet_maps', np.array([NdetP_smooth,
-                                              Ndetsma_smooth,
-                                              NdetF_smooth,
-                                              NdetTeq_smooth]))
+    np.save('KeplerMaps/Ndet_maps_%s'%suffix, np.array([NdetP, Ndetsma,
+                                                        NdetF, NdetTeq]))
 
-    return NdetP_smooth, Ndetsma_smooth, NdetF_smooth, NdetTeq_smooth
+    return NdetP, Ndetsma, NdetF, NdetTeq
 
 
 
@@ -148,9 +161,9 @@ def compute_SNR_maps(self, sigs=0):
         SNRTeq_maps[i] = gaussian_filter(SNRTeq_maps[i], sigs[3])
 
     # save to table
-    np.save('KeplerMaps/KepIDsv2', KepIDsout)
-    np.save('KeplerMaps/SNR_mapsv2', np.array([SNRP_maps, SNRsma_maps, SNRF_maps,
-                                             SNRTeq_maps]))
+    np.save('KeplerMaps/KepIDs_%s'%suffix, KepIDsout)
+    np.save('KeplerMaps/SNR_maps_%s'%suffix, np.array([SNRP_maps, SNRsma_maps,
+                                                       SNRF_maps, SNRTeq_maps]))
 
     return KepIDsout, SNRP_maps, SNRsma_maps, SNRF_maps, SNRTeq_maps 
 
@@ -184,8 +197,8 @@ def compute_MES_maps(SNRP_maps, SNRsma_maps, SNRF_maps, SNRTeq_maps, sigs=0):
         MESTeq_maps[i] = gaussian_filter(MESTeq_maps[i], sigs[3])
 
     # save to table
-    np.save('KeplerMaps/MES_mapsv2', np.array([MESP_maps, MESsma_maps, MESF_maps,
-                                               MESTeq_maps]))
+    np.save('KeplerMaps/MES_maps_%s'%suffix, np.array([MESP_maps, MESsma_maps,
+                                                       MESF_maps, MESTeq_maps]))
         
     return MESP_maps, MESsma_maps, MESF_maps, MESTeq_maps
 
@@ -240,12 +253,14 @@ def compute_sens_maps(KepIDs, MESP_maps, MESsma_maps, MESF_maps, MESTeq_maps,
         sensSmearTeq_maps[i] = gaussian_filter(sensSmearTeq_maps[i], sigs[7])
 
     # save to table
-    np.save('KeplerMaps/sens_mapsv2', np.array([sensP_maps, senssma_maps,
-                                              sensF_maps, sensTeq_maps]))
-    np.save('KeplerMaps/sensSmear_mapsv2', np.array([sensSmearP_maps,
-                                                   sensSmearsma_maps,
-                                                   sensSmearF_maps,
-                                                   sensSmearTeq_maps]))
+    np.save('KeplerMaps/sens_maps_%s'%suffix, np.array([sensP_maps,
+                                                        senssma_maps,
+                                                        sensF_maps,
+                                                        sensTeq_maps]))
+    np.save('KeplerMaps/sensSmear_maps_%s'%suffix,np.array([sensSmearP_maps,
+                                                            sensSmearsma_maps,
+                                                            sensSmearF_maps,
+                                                            sensSmearTeq_maps]))
         
     return sensP_maps, sensSmearP_maps, senssma_maps, sensSmearsma_maps, \
         sensF_maps, sensSmearF_maps, sensTeq_maps, sensSmearTeq_maps 
@@ -312,8 +327,10 @@ def compute_transitprob_maps(self, KepIDs, sigs=0, correction_factor=1.08):
         probTeq_maps[i] = gaussian_filter(probTeq_maps[i], sigs[3])
 
     # save to table
-    np.save('KeplerMaps/prob_mapsv2', np.array([probP_maps, probsma_maps,
-                                              probF_maps, probTeq_maps]))
+    np.save('KeplerMaps/prob_maps_%s'%suffix, np.array([probP_maps,
+                                                        probsma_maps,
+                                                        probF_maps,
+                                                        probTeq_maps]))
         
     return probP_maps, probsma_maps, probF_maps, probTeq_maps
 
@@ -330,41 +347,83 @@ def compute_completeness_maps(sensP, sensSmearP, senssma, sensSmearsma,
     compTeq_maps, compSmearTeq_maps = sensTeq*probTeq, sensSmearTeq*probTeq
 
     # save to table
-    np.save('KeplerMaps/completeness_mapsv2', np.array([compP_maps, compsma_maps,
-                                                      compF_maps,
-                                                      compTeq_maps]))
-    np.save('KeplerMaps/completenessSmear_mapsv2', np.array([compSmearP_maps,
-                                                           compSmearsma_maps,
-                                                           compSmearF_maps,
-                                                           compSmearTeq_maps]))
+    np.save('KeplerMaps/completeness_maps_%s'%suffix, np.array([compP_maps,
+                                                                compsma_maps,
+                                                                compF_maps,
+                                                                compTeq_maps]))
+    np.save('KeplerMaps/completenessSmear_maps_%s'%suffix,np.array([compSmearP_maps,
+                                                                    compSmearsma_maps,
+                                                                    compSmearF_maps,
+                                                                    compSmearTeq_maps]))
         
     return compP_maps, compSmearP_maps, compsma_maps, compSmearsma_maps, \
         compF_maps, compSmearF_maps, compTeq_maps, compSmearTeq_maps 
 
 
 
-def compute_occurrence_maps(Ndet, Ndetsma, NdetF, NdetTeq,
+def compute_occurrence_maps(NdetP, Ndetsma, NdetF, NdetTeq,
                             compP, compSmearP, compsma, compSmearsma,
-                            compF, compSmearF, compTeq, compSmearTeq):
+                            compF, compSmearF, compTeq, compSmearTeq,
+                            Ndetsig=0):
     '''See compute_Ndet_maps and compute_completeness_maps to get input.'''
-    fP_maps, fSmearP_maps = NdetP/np.mean(compP,0), NdetP/np.mean(compSmearP,0)
-    fsma_maps, fSmearsma_maps = Ndetsma/np.mean(compsma,0), \
-                                Ndetsma/np.mean(compSmearsma,0)
-    fF_maps, fSmearF_maps = NdetF/np.mean(compF,0), NdetF/np.mean(compSmearF,0)
-    fTeq_maps, fSmearTeq_maps = NdetTeq/np.mean(compTeq,0), \
-                                NdetTeq/np.mean(compSmearTeq,0)
+    # smooth Ndet maps to help mitigate the small number statistics
+    NdetP = gaussian_filter(NdetP, float(Ndetsig))
+    Ndetsma = gaussian_filter(Ndetsma, float(Ndetsig))
+    NdetF = gaussian_filter(NdetF, float(Ndetsig))
+    NdetTeq = gaussian_filter(NdetTeq, float(Ndetsig))
+
+    Nstars = compP.shape[0]
+    fP_maps = NdetP / np.mean(compP,0) / Nstars
+    fSmearP_maps = NdetP / np.mean(compSmearP,0) / Nstars
+    fsma_maps = Ndetsma / np.mean(compsma,0) / Nstars
+    fSmearsma_maps = Ndetsma / np.mean(compSmearsma,0) / Nstars
+    fF_maps = NdetF / np.mean(compF,0) / Nstars
+    fSmearF_maps = NdetF / np.mean(compSmearF,0) / Nstars
+    fTeq_maps = NdetTeq / np.mean(compTeq,0) / Nstars
+    fSmearTeq_maps = NdetTeq / np.mean(compSmearTeq,0) / Nstars
 
     # save to table
-    np.save('KeplerMaps/occurrence_mapsv2', np.array([fP_maps, fsma_maps,
-                                                    fF_maps, fTeq_maps]))
-    np.save('KeplerMaps/occurrenceSmear_mapsv2', np.array([fSmearP_maps,
-                                                         fSmearsma_maps,
-                                                         fSmearF_maps,
-                                                         fSmearTeq_maps]))
+    np.save('KeplerMaps/occurrence_maps_%s'%suffix, np.array([fP_maps,
+                                                              fsma_maps,
+                                                              fF_maps,
+                                                              fTeq_maps]))
+    np.save('KeplerMaps/occurrenceSmear_maps_%s'%suffix, np.array([fSmearP_maps,
+                                                                   fSmearsma_maps,
+                                                                   fSmearF_maps,
+                                                                   fSmearTeq_maps]))
     return fP_maps, fSmearP_maps, fsma_maps, fSmearsma_maps, \
         fF_maps, fSmearF_maps, fTeq_maps, fSmearTeq_maps
 
-    
+
+
+def _MC_sample_planets(Ps, smas, Fs, Teqs, rps, Nsamp):
+    # get parameters and uncertainties
+    P, e_P = Ps
+    sma, ehi_sma, elo_sma = smas
+    F, ehi_F, elo_F = Fs
+    Teq, ehi_Teq, elo_Teq = Teqs
+    rp, ehi_rp, elo_rp = rps
+
+    # MC sample each planet
+    Nplanets, Nsamp = P.size, int(Nsamp)
+    samp_P   = np.zeros(0)
+    samp_sma = np.zeros(0)
+    samp_F   = np.zeros(0)
+    samp_Teq = np.zeros(0)
+    samp_rp  = np.zeros(0)
+    for i in range(Nplanets):
+        print float(i)/Nplanets
+        samp_P = np.append(samp_P, np.random.randn(Nsamp)*e_P[i]+P[i])
+        samp_sma = np.append(samp_sma, get_samples_from_percentiles(sma[i],
+            ehi_sma[i], elo_sma[i], pltt=False, Nsamp=Nsamp, add_p5_p95=1)[2])
+        samp_F = np.append(samp_F, get_samples_from_percentiles(F[i],
+                ehi_F[i], elo_F[i], pltt=False, Nsamp=Nsamp, add_p5_p95=1)[2])
+        samp_Teq = np.append(samp_Teq, get_samples_from_percentiles(Teq[i],
+            ehi_Teq[i], elo_Teq[i], pltt=False, Nsamp=Nsamp, add_p5_p95=1)[2])
+        samp_rp = np.append(samp_rp, get_samples_from_percentiles(rp[i],
+            ehi_rp[i], elo_rp[i], pltt=False, Nsamp=Nsamp, add_p5_p95=1)[2])
+        
+    return samp_P, samp_sma, samp_F, samp_Teq, samp_rp
 
 
 def _get_one_DE_map(KepID, MES_map):
@@ -413,7 +472,26 @@ def compute_avg_detprob_curve():
     return MES, DEs, SmearDEs, DEavg, SmearDEavg
 
 
-
+def load_maps(suff):
+    NdetP,Ndetsma,NdetF,NdetTeq = np.load('KeplerMaps/Ndet_maps_%s.npy'%suff)
+    KepIDs = np.load('KeplerMaps/KepIDs_%s.npy'%suff)
+    SNRP, SNRsma, SNRF, SNRTeq = np.load('KeplerMaps/SNR_maps_%s.npy'%suff)
+    MESP, MESsma, MESF, MESTeq = np.load('KeplerMaps/MES_maps_%s.npy'%suff)
+    sensP,senssma,sensF,sensTeq = np.load('KeplerMaps/sens_maps_%s.npy'%suff)
+    sensSmearP, sensSmearsma, sensSmearF, sensSmearTeq = \
+                                np.load('KeplerMaps/sensSmear_maps_%s.npy'%suff)
+    probP, probsma, probF, probTeq = np.load('KeplerMaps/prob_maps_%s.npy'%suff)
+    compP, compsma, compF, compTeq = \
+                            np.load('KeplerMaps/completeness_maps_%s.npy'%suff)
+    compSmearP, compSmearsma, compSmearF, compSmearTeq = \
+                        np.load('KeplerMaps/completenessSmear_maps_%s.npy'%suff)
+    fP, fsma, fF, fTeq = np.load('KeplerMaps/occurrence_maps_%s.npy'%suff)
+    fSmearP, fSmearsma, fSmearF, fSmearTeq = \
+                        np.load('KeplerMaps/occurrenceSmear_maps_%s.npy'%suff)
+    return NdetP, Ndetsma, NdetF, NdetTeq, KepIDs, SNRP, SNRsma, SNRF, SNRTeq, MESP, MESsma, MESF, MESTeq, sensP, sensSmearP, senssma, sensSmearsma, sensF, sensSmearF, sensTeq, sensSmearTeq, probP, probsma, probF, probTeq, compP, compSmearP, compsma, compSmearsma, compF, compSmearF, compTeq, compSmearTeq, fP, fSmearP, fsma, fSmearsma, fF, fSmearF, fTeq, fSmearTeq
+    
+    
+    
 if __name__ == '__main__':
     self = loadpickle('Keplertargets/KepConfirmedMdwarfPlanets_v3')
     print 'Computing detection maps...'
@@ -430,3 +508,6 @@ if __name__ == '__main__':
     compP, compSmearP, compsma, compSmearsma, compF, compSmearF, compTeq, compSmearTeq = compute_completeness_maps(sensP, sensSmearP, senssma, sensSmearsma, sensF, sensSmearF, sensTeq, sensSmearTeq, probP, probsma, probF, probTeq)
     print 'Computing 2D planet occurrence rates maps for all Kepler M dwarfs...'
     fP, fSmearP, fsma, fSmearsma, fF, fSmearF, fTeq, fSmearTeq = compute_occurrence_maps(NdetP, Ndetsma, NdetF, NdetTeq, compP, compSmearP, compsma, compSmearsma, compF, compSmearF, compTeq, compSmearTeq)
+    
+    #p = load_maps('allM')
+    #NdetP, Ndetsma, NdetF, NdetTeq, KepIDs, SNRP, SNRsma, SNRF, SNRTeq, MESP, MESsma, MESF, MESTeq, sensP, sensSmearP, senssma, sensSmearsma, sensF, sensSmearF, sensTeq, sensSmearTeq, probP, probsma, probF, probTeq, compP, compSmearP, compsma, compSmearsma, compF, compSmearF, compTeq, compSmearTeq, fP, fSmearP, fsma, fSmearsma, fF, fSmearF, fTeq, fSmearTeq = p
