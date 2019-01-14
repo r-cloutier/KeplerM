@@ -1,10 +1,12 @@
 from imports import *
 from scipy.stats import gamma, skewnorm
 from scipy.optimize import curve_fit
+from priors import get_results
+import mwdust
 
 
 global KepMdwarffile, G, data_spanC
-KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
+KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11_archiveplanets.csv'
 G = 6.67408e-11
 
 # get stellar completeness parameters
@@ -13,6 +15,202 @@ d = np.genfromtxt('TPSfiles/nph-nstedAPI_clean.txt', skip_header=208, delimiter=
 kepidC,data_spanC,cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,cdpp7d5,cdpp9,cdpp10d5,cdpp12,cdpp12d5,cdpp15 = d.T
 transit_durs = np.array([1.5,2,2.5,3,3.5,4.5,5,6,7.5,9,10.5,12,12.5,15])
 cdpps = np.array([cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,cdpp7d5,cdpp9,cdpp10d5,cdpp12,cdpp12d5,cdpp15]).T
+
+
+def write_Kepler_Mdwarf_GAIAparams(kepids):
+    '''Use Megan Bedell's cross-match between GAIA DR2 and the Kepler catalog 
+    to retrieve stellar parameters for Kepler M dwarfs of interest.
+    THIS SHOULD ONLY BE USED ONCE.'''
+
+    # get cross-matched data
+    fs = np.array(glob.glob('../GAIAMdwarfs/input_data/Keplertargets/kepler_dr2_*.fits'))
+    N = kepids.size
+    ras, decs = np.zeros(N), np.zeros(N)
+    GBPmag, e_GBPmag = np.zeros(N), np.zeros(N)
+    GRPmag, e_GRPmag = np.zeros(N), np.zeros(N)
+    Kepmag = np.zeros(N)
+    Jmag, Hmag, Kmag = np.zeros(N), np.zeros(N), np.zeros(N)
+    parallax_mas, e_parallax = np.zeros(N), np.zeros(N)
+    dist_pc, ehi_dist, elo_dist = np.zeros(N), np.zeros(N)
+    mu, ehi_mu, elo_mu = np.zeros(N), np.zeros(N)
+    AK, e_AK = np.zeros(N), np.zeros(N)
+    MK, ehi_MK, elo_MK = np.zeros(N), np.zeros(N)
+    Rs_RSun, ehi_Rs, elo_Rs = np.zeros(N), np.zeros(N)
+    Teff_K, ehi_Teff, elo_Teff = np.zeros(N), np.zeros(N)
+    Ms_MSun, ehi_Ms, elo_Ms = np.zeros(N), np.zeros(N)
+    logg_dex, ehi_logg, elo_logg = np.zeros(N), np.zeros(N)
+    for i in range(N):
+
+        for j in range(fs.size):
+            
+            hdu = fits.open(fs[i])[1]
+            g = hdu.data['kepid'] == kepids[i]
+            if g.sum() == 1:
+
+                ras[i] = hdu.data['ra'][g]
+                decs[i] = hdu.data['dec'][g]
+                GBPmag[i] = hdu.data['phot_bp_mean_mag'][g]
+                FBP = hdu.data['phot_bp_mean_flux'][g]
+                eFBP = hdu.data['phot_bp_mean_flux_error'][g]
+                e_GBPmag[i] = -2.5*np.log10(FBP / (FBP+eFBP))
+                GRPmag[i] = hdu.data['phot_rp_mean_mag'][g]
+                FRP = hdu.data['phot_rp_mean_flux'][g]
+                eFRP = hdu.data['phot_rp_mean_flux_error'][g]
+                e_GRPmag[i] = -2.5*np.log10(FRP / (FRP+eFRP))
+                Kepmag[i] = hdu.data['kepmag'][g]
+                Jmag[i] = hdu.data['jmag'][g]
+                Hmag[i] = hdu.data['hmag'][g]
+                Kmag[i] = hdu.data['kmag'][g]
+                parallax_mas[i] = hdu.data['parallax'][g] + .029
+                e_parallax[i] = hdu.data['parallax_error'][g]
+
+                Nsamp = 1000                 
+                samp_GBP = np.random.randn(Nsamp)*e_GBPmag[i] + GBPmag[i]
+                samp_GRP = np.random.randn(Nsamp)*e_GRPmag[i] + GRPmag[i]
+
+                # get 2MASS photometric uncertainies
+                e_Jmag[i], e_Hmag[i], e_Kmag[i] = _get_2MASS_Kep(ras[-1:], decs[-1:],
+                                                                 Jmag[-1:], Hmag[-1:], Kmag[-1:])
+                samp_J = np.random.randn(Nsamp)*e_Jmag[i] + Jmag[i]
+                samp_H = np.random.randn(Nsamp)*e_Hmag[i] + Hmag[i]
+                samp_K = np.random.randn(Nsamp)*e_Kmag[i] + Kmag[i]
+
+                # get distance posteriors from Bailor-Jones
+                try:
+                    fname='../GAIAMdwarfs/Gaia-DR2-distances_custom/DistancePosteriors/KepID_%i.csv'%(prefix,
+                                                                                                      kepids[i])
+                    x_dist, pdf_dist = np.loadtxt(fname, delimiter=',', skiprows=1,
+                                                  usecols=(1,2)).T
+                    samp_dist = np.random.choice(x_dist, Nsamp, p=pdf_dist/pdf_dist.sum())
+                    dist_pc[i], ehi_dist[i], elo_dist[i] = get_results(samp_dist.reshape(Nsamp,1))
+                except IOError:
+                    raise ValueError('Need to compute the distance posterior for KepID_%i (see get_gaia_2MASS.save_posteriors())'%kepids[i])                    
+                
+                # compute stellar parameters
+                samp_mu = 5*np.log10(samp_dist) - 5
+                mu[i], ehi_mu[i], elo_mu[i] = get_results(samp_mu.reshape(Nsamp,1))
+                l, b = hdu.data['l'][g], hdu.data['b'][g]
+                AK[i], e_AK[i] = _compute_AK_mwdust(l, b, dist_pc[i], ehi_dist[i])
+                samp_AK = np.random.randn(Nsamp)*e_AK[i] + AK[i]
+                samp_MK = samp_K + samp_mu + samp_AK
+                MK[i], ehi_MK[i], elo_MK[i] = get_results(samp_MK.reshape(Nsamp,1))
+                samp_Rs = _sample_Rs_from_MK(samp_MK)
+                Rs_RSun[i], ehi_Rs[i], elo_Rs[i] = get_results(samp_Rs.reshape(Nsamp,1))
+                samp_Teff = _sample_Teff_from_colors(samp_GBP, samp_GRP, samp_J, samp_H)
+                Teff_K[i], ehi_Teff[i], elo_Teff[i] = get_results(samp_Teff.reshape(Nsamp,1))
+                samp_Ms = _sample_Ms_from_MK(samp_MK)
+                Ms_MSun[i], ehi_Ms[i], elo_Ms[i] = get_results(samp_Ms.reshape(Nsamp,1))
+                samp_logg = _sample_logg(samp_Ms, samp_Rs)
+                logg_dex[i], ehi_logg[i], elo_logg[i] = get_results(samp_logg.reshape(Nsamp,1))
+
+    # save to file
+    hdr = 'KepID,ra_deg,dec_deg,GBPmag,e_GBPmag,GRPmag,e_GRPmag,Kepmag,Jmag,e_Jmag,Hmag,e_Hmag,Kmag,e_Kmag,parallax_mas,e_parallax,dist_pc,ehi_dist,elo_dist,mu,ehi_mu,elo_mu,AK,e_AK,MK,ehi_MK,elo_MK,Rs_RSun,ehi_Rs,elo_Rs,Teff_K,ehi_Teff,elo_Teff,Ms_MSun,ehi_Ms,elo_Ms,logg_dex,ehi_logg,elo_logg'
+    outarr = np.array([kepids,ras,decs,GBPmag,e_GBPmag,GRPmag,e_GRPmag,Kepmag,Jmag,e_Jmag,Hmag,e_Hmag,Kmag,e_Kmag,parallax_mas,e_parallax,dist_pc,ehi_dist,elo_dist,mu,ehi_mu,elo_mu,AK,e_AK,MK,ehi_MK,elo_MK,Rs_RSun,ehi_Rs,elo_Rs,Teff_K,ehi_Teff,elo_Teff,Ms_MSun,ehi_Ms,elo_Ms,logg_dex,ehi_logg,elo_logg])
+    np.savetxt(KepMdwarffile, outarr.T, delimiter=',', fmt='%.8e')
+    return outarr
+
+
+def _get_2MASS_Kep(ras_deg, decs_deg, Jmags, Hmags, Kmags,
+                   radius_deg=.017, phot_rtol=.02):
+    '''Match Kepler stars with GAIA data to the 2MASS point-source catlog to
+    retrieve photometric uncertainties.'''
+    # get 2MASS data for Kepler stars
+    # https://irsa.ipac.caltech.edu/applications/Gator/
+    d = np.load('input_data/Keplertargets/fp_2mass.fp_psc12298.npy')
+    inds = np.array([0,1,3,5,6,8,9,11])
+    ras2M, decs2M, J2M, eJ2M, H2M, eH2M, K2M, eK2M = d[:,inds].T
+
+    # match each star individually
+    Nstars = ras_deg.size
+    e_Jmags, e_Hmags, e_Kmags = np.zeros(Nstars), np.zeros(Nstars), \
+                                np.zeros(Nstars)
+    print 'Getting 2MASS photometry...'
+    for i in range(Nstars):
+
+        if i % 1e2 == 0:
+            print float(i) / Nstars
+
+        # get matching photometry between Kepler-GAIA and 2MASS
+        g = (ras2M >= ras_deg[i] - radius_deg) & \
+            (ras2M <= ras_deg[i] + radius_deg) & \
+            (decs2M >= decs_deg[i] - radius_deg) & \
+            (decs2M <= decs_deg[i] + radius_deg) & \
+            np.isclose(J2M, Jmags[i], rtol=phot_rtol) & \
+            np.isclose(H2M, Hmags[i], rtol=phot_rtol) & \
+            np.isclose(K2M, Kmags[i], rtol=phot_rtol)
+
+        if g.sum() > 0:
+            g2 = (abs(J2M[g]-Jmags[i]) == np.min(abs(J2M[g]-Jmags[i]))) & \
+                 (abs(K2M[g]-Kmags[i]) == np.min(abs(K2M[g]-Kmags[i])))
+            e_Jmags[i] = eJ2M[g][g2][0]
+            e_Hmags[i] = eH2M[g][g2][0]
+            e_Kmags[i] = eK2M[g][g2][0]
+
+        else:
+            e_Jmags[i], e_Hmags[i], e_Kmags[i] = np.repeat(np.nan, 3)
+
+    return e_Jmags, e_Hmags, e_Kmags
+
+
+
+def _compute_AK_mwdust(ls, bs, dist, edist, eAK_frac=.3):
+    '''Using the EB-V map from 2014MNRAS.443.2907S and the extinction vector
+    RK = 0.31 from Schlafly and Finkbeiner 2011 (ApJ 737, 103)'''
+    dustmap = mwdust.Combined15(filter='2MASS Ks')
+    dist_kpc, edist_kpc = np.ascontiguousarray(dist)*1e-3, \
+                          np.ascontiguousarray(edist)*1e-3
+    ls, bs = np.ascontiguousarray(ls), np.ascontiguousarray(bs)
+    AK, eAK = np.zeros(ls.size), np.zeros(ls.size)
+    for i in range(ls.size):
+        v = dustmap(ls[i], bs[i],
+                    np.array([dist_kpc[i], dist_kpc[i]+edist_kpc[i]]))
+        AK[i], eAK[i] = v[0], np.sqrt(abs(np.diff(v))**2 + (eAK_frac*v[0])**2)
+    return AK, eAK
+
+
+
+def _sample_Rs_from_MK(samp_MK):
+    '''Use relation from Mann+2015 (table 1)'''
+    a, b, c, Rs_sigma_frac = 1.9515, -.3520, .01680, .0289
+    p = np.poly1d((c,b,a))
+    samp_MK_tmp = np.copy(samp_MK)
+    samp_MK_tmp[(samp_MK<=4.6) | (samp_MK>=9.8)] = np.nan
+    samp_Rs = p(samp_MK_tmp)
+    samp_Rs += np.random.normal(0, samp_Rs*Rs_sigma_frac, samp_MK.size)
+    return samp_Rs
+
+
+def _sample_Teff_from_colors(samp_GBPmag, samp_GRPmag, samp_Jmag, samp_Hmag,
+                             Teff_scatter=49):
+    '''Use the relation from Mann+2015 (table 2)'''
+    a, b, c, d, e, f, g = 3.172, -2.475, 1.082, -.2231, .01738, .08776, -.04355
+    pG = np.poly1d((e,d,c,b,a))
+    p2 = np.poly1d((g,f,0))
+    samp_Teff = 35e2 * (pG(samp_GBPmag-samp_GRPmag) + p2(samp_Jmag-samp_Hmag)) \
+                + np.random.normal(0, Teff_scatter, samp_Jmag.size)
+    return samp_Teff
+
+
+def _sample_Ms_from_MK(samp_MK):
+    '''Use relation from Benedict+2016'''
+    c0 = np.random.normal(.2311, 4e-4, samp_MK.size)
+    c1 = np.random.normal(-.1352, 7e-4, samp_MK.size)
+    c2 = np.random.normal(.04, 5e-4, samp_MK.size)
+    c3 = np.random.normal(.0038, 2e-4, samp_MK.size)
+    c4 = np.random.normal(-.0032, 1e-4, samp_MK.size)
+    samp_MK_tmp = np.copy(samp_MK)
+    samp_MK_tmp[(samp_MK<=4.6) | (samp_MK>10)] = np.nan
+    samp_MK_tmp[samp_MK>=10] = np.nan
+    dMK = samp_MK_tmp - 7.5
+    samp_Ms = c0 + c1*dMK + c2*dMK**2 + c3*dMK**3 + c4*dMK**4
+    return samp_Ms
+
+
+def _sample_logg(samp_Ms, samp_Rs):
+    G = 6.67e-11
+    samp_logg = np.log10(G*rvs.Msun2kg(samp_Ms)*1e2 / rvs.Rsun2m(samp_Rs)**2)
+    return samp_logg
+
 
 
 def get_Kepler_Mdwarf_planets(fname):

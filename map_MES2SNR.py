@@ -12,11 +12,14 @@ from scipy.optimize import curve_fit
 
 
 global KepMdwarffile, data_span
+# list of M dwarfs from the primary Kepler mission with GAIA-updated stellar parameters
 KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
 data_span = 372.   # one year of Kepler data (sect 3.1 Christiansen+2015)
 
 
 def _get_koi_cdpps():
+    '''Read-in from a Kepler-released file, the CDPP values on a discrete 
+    grid of transit durations, for each KOI.'''
     d = np.genfromtxt('TPSfiles/nph-nstedAPI_clean.txt', skip_header=208,
                       delimiter=',',
                       usecols=(0,64,65,66,67,68,69,70,71,72,73,74,75,76,77))
@@ -28,6 +31,9 @@ def _get_koi_cdpps():
 
 
 def _get_injected_planet_parameters():
+    '''Read-in the table from Christiansen+2015 of transiting planet parameters injected 
+    into the pixel data of KOIs and the resulting Multi-Event Statistic (analogous to the 
+    transit S/N).'''
     fname = 'Keplertargets/Christiansen2015_Table2_injectedplanetparams.csv'
     d = np.loadtxt(fname, delimiter=',', usecols=(0,1,5,6,8))
     kepidI, P, Z, D, MES = d.T
@@ -36,7 +42,7 @@ def _get_injected_planet_parameters():
 
 def compute_SNR_2_MES():
     '''Get SNR and MES arrays for Kepler stars from various sources.'''    
-    # get all required data
+    # get data of CDPP and injected planet parameters for all KOIs
     kepidC, transit_durs, cdpps = _get_koi_cdpps()
     kepidI, Ps, Zs, Ds, MESfull = _get_injected_planet_parameters()
     Mdwarf_kepids = np.loadtxt(KepMdwarffile, delimiter=',', usecols=(0))
@@ -44,12 +50,13 @@ def compute_SNR_2_MES():
     # compute CDPP(transit duration)
     Nstars = kepidC.size#Mdwarf_kepids.size
     CDPPs, SNRs, MESs = np.zeros(Nstars), np.zeros(Nstars), np.zeros(Nstars)
-    ifMdwarf = np.zeros(Nstars)
+    isMdwarf = np.zeros(Nstars, dtype=bool)
     for i in range(Nstars):
 
         if i % 1e3 == 0:
             print float(i)/Nstars
-            
+    
+	# compute the MES and S/N        
         g = kepidI == kepidC[i]
         if g.sum() == 1:
             CDPPs[i] = gKM.get_fitted_cdpp(kepidC[i], Ds[g])
@@ -58,8 +65,11 @@ def compute_SNR_2_MES():
 
         else:
             CDPPs[i], MESs[i], SNRs[i] = np.repeat(np.nan, 3)
-        
-    return SNRs, MESs
+
+	# is this an M dwarf
+	isMdwarf[i] = True if np.any(np.in1d(Mdwarf_kepids, kepidC[i])) else False
+ 
+    return SNRs, MESs, isMdwarf
 
 
 
@@ -108,13 +118,20 @@ def fit_SNR2MES(SNRs, MESs, pltt=False):
                  label='y=%.2fx^%.2f'%tuple(popt))
         plt.plot(SNRbin, powerlaw_func(SNRbin, .75, 1), ':',
                  label='y=0.75x (Petigura prediction)')
-        plt.xscale('log'), plt.yscale('log')
+    	plt.xlabel('Transit S/N'), plt.ylabel('Multi-Event Statistic (MES)')
+    	plt.xscale('log'), plt.yscale('log')
         plt.legend(loc='upper left')
-        plt.show()
+    	plt.savefig('plots/MES_SNR.png')
+    	plt.show()
 
     return popt, psig
 
 
 if __name__ == '__main__':
-    SNRs, MESs = compute_SNR_2_MES()
-    coeffs, e_coeffs = fit_SNR2MES(SNRs, MESs, pltt=1)
+    # read-in the Kepler-derived MES and transit S/N from transiting planets so that we can map one to the other
+    SNRs, MESs, isMdwarf = compute_SNR_2_MES()
+    
+    # fit the relation between MES and S/N
+    #g = isMdwarf
+    g = np.repeat(True, SNRs.size)
+    coeffs, e_coeffs = fit_SNR2MES(SNRs[g], MESs[g], pltt=1)
