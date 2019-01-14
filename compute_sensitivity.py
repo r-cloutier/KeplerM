@@ -12,7 +12,7 @@ smabins = np.logspace(-2, np.log10(.35), xlen)
 Fbins = np.logspace(np.log10(.5), 2, xlen)
 Teqbins = np.logspace(np.log10(240), np.log10(12e2), xlen)
 rpbins = np.logspace(np.log10(.5), 1, 31)
-suffix = 'allM'
+suffix = 'Msgtr0d6'
 
 
 # get stellar completeness parameters
@@ -25,7 +25,6 @@ cdppsC = np.array([cdpp1d5,cdpp2,cdpp2d5,cdpp3,cdpp3d5,cdpp4d5,cdpp5,cdpp6,
                    cdpp7d5,cdpp9,cdpp10d5,cdpp12,cdpp12d5,cdpp15]).T
 
 
-# TEMP: need to do MC sampling here over errorbars
 def compute_Ndet_maps(self, sigs=0, condition=None, Nsamp=1e3):
     '''Compute the map of planet detections over some various distance 
     proxies and planet radius. This will be used to compute the occurrence rate 
@@ -107,7 +106,8 @@ def compute_SNR_maps(self, sigs=0):
     KepIDsout = np.zeros(Nstars)
     for i in range(Nstars):
 
-        print float(i)/Nstars
+	if i % 1e2 == 0:
+            print float(i)/Nstars
         KepIDsout[i] = int(fs[i].split('_')[-1].split('.')[0])
         Rs = float(Rs_gaia[KepIDs == KepIDsout[i]])
         Teff = float(Teff_gaia[KepIDs == KepIDsout[i]])
@@ -292,7 +292,8 @@ def compute_transitprob_maps(self, KepIDs, sigs=0, correction_factor=1.08):
     probTeq_maps = np.zeros((Nstars,xlen,ylen))
     for i in range(Nstars):
         
-        print float(i)/Nstars
+	if i % 1e2 == 0:
+            print float(i)/Nstars
         Rs = float(Rs_gaia[KepIDs_gaia == KepIDs[i]])
         Teff = float(Teff_gaia[KepIDs_gaia == KepIDs[i]])
         Ms = float(Ms_gaia[KepIDs_gaia == KepIDs[i]])
@@ -412,7 +413,8 @@ def _MC_sample_planets(Ps, smas, Fs, Teqs, rps, Nsamp):
     samp_Teq = np.zeros(0)
     samp_rp  = np.zeros(0)
     for i in range(Nplanets):
-        print float(i)/Nplanets
+	if i % 1e2 == 0:
+            print float(i)/Nplanets
         samp_P = np.append(samp_P, np.random.randn(Nsamp)*e_P[i]+P[i])
         samp_sma = np.append(samp_sma, get_samples_from_percentiles(sma[i],
             ehi_sma[i], elo_sma[i], pltt=False, Nsamp=Nsamp, add_p5_p95=1)[2])
@@ -495,7 +497,8 @@ def load_maps(suff):
 if __name__ == '__main__':
     self = loadpickle('Keplertargets/KepConfirmedMdwarfPlanets_v3')
     print 'Computing detection maps...'
-    NdetP, Ndetsma, NdetF, NdetTeq = compute_Ndet_maps(self)
+    cond = self.Mss2 > .6
+    NdetP, Ndetsma, NdetF, NdetTeq = compute_Ndet_maps(self, condition=cond)
     print 'Computing transit S/N maps for all Kepler M dwarfs...'
     KepIDs, SNRP, SNRsma, SNRF, SNRTeq = compute_SNR_maps(self)
     print 'Computing MES maps for all Kepler M dwarfs...'
