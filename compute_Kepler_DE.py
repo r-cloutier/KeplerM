@@ -5,7 +5,7 @@ from KeplerPORTs import *
 
 
 global KepMdwarffile, Pgrid, rpgrid
-KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
+KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11_archiveplanetsv2.csv'
 Pgrid = np.logspace(np.log10(.5), np.log10(1e2), 1000)
 rpgrid = np.logspace(np.log10(.5), np.log10(10), 500)
 
