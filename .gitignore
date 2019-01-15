@@ -1,11 +1,15 @@
 *pyc
 *~
+/UBVRIplus
 /TPSfiles
 /Keplertargets
 /KeplerMaps
 /InputFiles
+/paper
+tocomputedistance.csv
 *pdf
 *png
 *md
 *fits
+*tmp
 *bat
