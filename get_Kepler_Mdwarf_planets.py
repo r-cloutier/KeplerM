@@ -62,7 +62,7 @@ def get_Kepler_Mdwarf_planets(fname):
         self.elo_dists[i] = elo_dist[g] if g.sum() == 1 else np.nan
         self.AKs[i] = AK[g] if g.sum() == 1 else np.nan
         self.e_AKs[i] = e_AK[g] if g.sum() == 1 else np.nan
-        self.MKs[i] = MK[g] if g.sum() == 1 else np.nan
+	self.MKs[i] = MK[g] if g.sum() == 1 else np.nan
         self.ehi_MKs[i] = ehi_MK[g] if g.sum() == 1 else np.nan
         self.elo_MKs[i] = elo_MK[g] if g.sum() == 1 else np.nan
 
@@ -164,7 +164,8 @@ class KepConfirmedMdwarfPlanets:
         self.dists, self.ehi_dists, self.elo_dists = np.zeros(N), np.zeros(N), \
                                                      np.zeros(N)
         self.AKs, self.e_AKs = np.zeros(N), np.zeros(N)
-        self.MKs, self.ehi_MKs, self.elo_MKs=np.zeros(N),np.zeros(N),np.zeros(N)
+        self.BCKs, self.e_BCKs = np.zeros(N), np.zeros(N)
+	self.MKs, self.ehi_MKs, self.elo_MKs=np.zeros(N),np.zeros(N),np.zeros(N)
         self.Rss1, self.ehi_Rss1, self.elo_Rss1=np.zeros(N),np.zeros(N),np.zeros(N)
         self.Mss1, self.ehi_Mss1, self.elo_Mss1=np.zeros(N),np.zeros(N),np.zeros(N)
         self.Teffs1, self.ehi_Teffs1, self.elo_Teffs1 = np.zeros(N), np.zeros(N), \
