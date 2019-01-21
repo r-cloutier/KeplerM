@@ -5,7 +5,7 @@ import mwdust, rvs
 
 
 global KepMdwarffile, G, data_spanC
-KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11_archiveplanets.csv'
+KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11_archiveplanetsv2.csv'
 G = 6.67408e-11
 
 # get stellar completeness parameters
@@ -26,10 +26,10 @@ def get_Kepler_Mdwarf_planets(fname):
 
     # get Kepler Mdwarfs parameters from GAIA
     dG = np.loadtxt(KepMdwarffile, delimiter=',')
-    KepID,ra_deg,dec_deg,GBPmag,e_GBPmag,GRPmag,e_GRPmag,Kepmag,Jmag,e_Jmag,Hmag,e_Hmag,Kmag,e_Kmag,parallax_mas,e_parallax,dist_pc,ehi_dist,elo_dist,mu,ehi_mu,elo_mu,AK,e_AK,MK,ehi_MK,elo_MK,Rs_RSun,ehi_Rs,elo_Rs,Teff_K,ehi_Teff,elo_Teff,Ms_MSun,ehi_Ms,elo_Ms,logg_dex,ehi_logg,elo_logg = dG.T
+    KepID,isMdwarf,badGAIA,bad2MASS,baddistpost,badTeff,ra_deg,dec_deg,GBPmag,e_GBPmag,GRPmag,e_GRPmag,Kepmag,Jmag,e_Jmag,Hmag,e_Hmag,Kmag,e_Kmag,parallax_mas,e_parallax,dist_pc,ehi_dist,elo_dist,mu,ehi_mu,elo_mu,AK,e_AK,BCK,e_BCK,MK,ehi_MK,elo_MK,Rs_RSun,ehi_Rs,elo_Rs,Teff_K,ehi_Teff,elo_Teff,Ms_MSun,ehi_Ms,elo_Ms,logg_dex,ehi_logg,elo_logg = dG.T
 
     # get planet transits parameters from NASA exoplanet archive
-    dK = np.genfromtxt('Keplertargets/NASAarchive_confirmed_KeplerMdwarfs.csv',
+    dK = np.genfromtxt('Keplertargets/NASAarchive_confirmed_Keplerlowmassstars.csv',
                        delimiter=',', skip_header=66)
     loc_rowid,kepid,kepler_name,koi_disposition,koi_score,koi_period,koi_period_err1,koi_period_err2,koi_time0,koi_time0_err1,koi_time0_err2,koi_impact,koi_impact_err1,koi_impact_err2,koi_duration,koi_duration_err1,koi_duration_err2,koi_depth,koi_depth_err1,koi_depth_err2,koi_ror,koi_ror_err1,koi_ror_err2,koi_prad,koi_prad_err1,koi_prad_err2,koi_incl,koi_incl_err1,koi_incl_err2,koi_dor,koi_dor_err1,koi_dor_err2,koi_limbdark_mod,koi_ldm_coeff4,koi_ldm_coeff3,koi_ldm_coeff2,koi_ldm_coeff1,koi_model_snr,koi_steff,koi_steff_err1,koi_steff_err2,koi_slogg,koi_slogg_err1,koi_slogg_err2,koi_smet,koi_smet_err1,koi_smet_err2,koi_srad,koi_srad_err1,koi_srad_err2,koi_kepmag,koi_jmag,koi_hmag,koi_kmag = dK.T
 
@@ -45,7 +45,11 @@ def get_Kepler_Mdwarf_planets(fname):
 
         # stellar parameters (both pre (1) and post-GAIA (2))
         self.KepIDs[i] = kepid[i]
-        self.isMdwarf[i] = g.sum() == 1
+        self.isMdwarf[i] = isMdwarf[g] if g.sum() == 1 else np.nan
+        self.badGAIA[i] = badGAIA[g] if g.sum() == 1 else np.nan
+        self.bad2MASS[i] = bad2MASS[g] if g.sum() == 1 else np.nan
+        self.baddistpost[i] = baddistpost[g] if g.sum() == 1 else np.nan
+        self.badTeff[i] = badTeff[g] if g.sum() == 1 else np.nan
         self.Jmags[i] = Jmag[g] if g.sum() == 1 else np.nan
         self.e_Jmags[i] = e_Jmag[g] if g.sum() == 1 else np.nan
         self.Hmags[i] = Hmag[g] if g.sum() == 1 else np.nan
@@ -62,6 +66,8 @@ def get_Kepler_Mdwarf_planets(fname):
         self.elo_dists[i] = elo_dist[g] if g.sum() == 1 else np.nan
         self.AKs[i] = AK[g] if g.sum() == 1 else np.nan
         self.e_AKs[i] = e_AK[g] if g.sum() == 1 else np.nan
+	self.BCKs[i] = BCK[g] if g.sum() == 1 else np.nan
+        self.e_BCKs[i] = e_BCK[g] if g.sum() == 1 else np.nan
 	self.MKs[i] = MK[g] if g.sum() == 1 else np.nan
         self.ehi_MKs[i] = ehi_MK[g] if g.sum() == 1 else np.nan
         self.elo_MKs[i] = elo_MK[g] if g.sum() == 1 else np.nan
@@ -156,7 +162,9 @@ class KepConfirmedMdwarfPlanets:
 
         # stellar parameters (both pre (1) and post-GAIA (2))
         self.KepIDs, self.isMdwarf = np.zeros(N), np.zeros(N, dtype=bool)
-        self.Jmags, self.e_Jmags = np.zeros(N), np.zeros(N)
+        self.badGAIA, self.bad2MASS = np.zeros(N, dtype=bool), np.zeros(N, dtype=bool)
+	self.baddistpost, self.badTeff = np.zeros(N, dtype=bool), np.zeros(N, dtype=bool)
+	self.Jmags, self.e_Jmags = np.zeros(N), np.zeros(N)
         self.Hmags, self.e_Hmags = np.zeros(N), np.zeros(N)
         self.Kmags, self.e_Kmags = np.zeros(N), np.zeros(N)
         self.pars, self.e_pars = np.zeros(N), np.zeros(N)

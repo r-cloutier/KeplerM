@@ -4,15 +4,14 @@ from scipy.ndimage.filters import gaussian_filter
 
 
 global KepMdwarffile, Pbins, smabins, Fbins, Teqbins, rpbins, transit_durs, \
-    cdppsC, suffix
-KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11.csv'
+    cdppsC
+KepMdwarffile = '../GAIAMdwarfs/input_data/Keplertargets/KepMdwarfsv11_archiveplanetsv2.csv'
 xlen = 40
 Pbins = np.logspace(np.log10(.5), 2, xlen)
 smabins = np.logspace(-2, np.log10(.35), xlen)
 Fbins = np.logspace(np.log10(.5), 2, xlen)
 Teqbins = np.logspace(np.log10(240), np.log10(12e2), xlen)
 rpbins = np.logspace(np.log10(.5), 1, 31)
-suffix = 'Msgtr0d6'
 
 
 # get stellar completeness parameters
@@ -495,20 +494,27 @@ def load_maps(suff):
     
     
 if __name__ == '__main__':
-    self = loadpickle('Keplertargets/KepConfirmedMdwarfPlanets_v3')
+    self = loadpickle('Keplertargets/KepConfirmedMdwarfPlanets_v5')
     print 'Computing detection maps...'
-    cond = self.Mss2 > .6
+    cond = self.Rss2 > .001
+    suffix = 'all'
     NdetP, Ndetsma, NdetF, NdetTeq = compute_Ndet_maps(self, condition=cond)
+    
     print 'Computing transit S/N maps for all Kepler M dwarfs...'
     KepIDs, SNRP, SNRsma, SNRF, SNRTeq = compute_SNR_maps(self)
+    
     print 'Computing MES maps for all Kepler M dwarfs...'
     MESP, MESsma, MESF, MESTeq = compute_MES_maps(SNRP, SNRsma, SNRF, SNRTeq)
+    
     print 'Computing sensitivity maps for all Kepler M dwarfs...'
     sensP, sensSmearP, senssma, sensSmearsma, sensF, sensSmearF, sensTeq, sensSmearTeq = compute_sens_maps(KepIDs, MESP, MESsma, MESF, MESTeq)
+    
     print 'Computing transit probability maps for all Kepler M dwarfs...'
     probP, probsma, probF, probTeq = compute_transitprob_maps(self, KepIDs)
+    
     print 'Computing completeness maps for all Kepler M dwarfs...'
     compP, compSmearP, compsma, compSmearsma, compF, compSmearF, compTeq, compSmearTeq = compute_completeness_maps(sensP, sensSmearP, senssma, sensSmearsma, sensF, sensSmearF, sensTeq, sensSmearTeq, probP, probsma, probF, probTeq)
+    
     print 'Computing 2D planet occurrence rates maps for all Kepler M dwarfs...'
     fP, fSmearP, fsma, fSmearsma, fF, fSmearF, fTeq, fSmearTeq = compute_occurrence_maps(NdetP, Ndetsma, NdetF, NdetTeq, compP, compSmearP, compsma, compSmearsma, compF, compSmearF, compTeq, compSmearTeq)
     
